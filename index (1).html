@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>iPhone Calculator – Web</title>
+  <style>
+    :root{
+      --bg:#000000;
+      --display:#ffffff;
+      --num:#333333;
+      --func:#a5a5a5;
+      --op:#ff9f0a;
+      --op-active-bg:#ffffff;
+      --op-active-fg:#ff9f0a;
+      --text:#ffffff;
+      --text-dark:#0a0a0a;
+      --radius:9999px;
+      --pad:12px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    html,body{height:100%;}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);
+      -webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;}
+    .phone{width:min(420px,100vw);height:min(900px,100vh);padding:18px 18px 28px;
+      box-sizing:border-box;display:grid;grid-template-rows:1fr auto;gap:16px;}
+    .display{display:flex;align-items:flex-end;justify-content:flex-end;padding:0 12px;
+      box-sizing:border-box;min-height:120px;font-weight:300;letter-spacing:-0.5px;overflow:hidden;}
+    .value{font-size:clamp(48px,10vw,88px);line-height:1;text-align:right;width:100%;
+      color:var(--display);white-space:nowrap;text-overflow:ellipsis;overflow:hidden;}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    button{border:0;outline:0;cursor:pointer;height:72px;border-radius:var(--radius);
+      font-size:28px;font-weight:500;color:var(--text);transition:transform .04s ease,filter .12s ease;
+      user-select:none;-webkit-tap-highlight-color:transparent;}
+    button:active{transform:scale(0.98);}
+    .btn-func{background:var(--func);color:var(--text-dark);}
+    .btn-num{background:var(--num);}
+    .btn-op{background:var(--op);}
+    .btn-op.active{background:var(--op-active-bg);color:var(--op-active-fg);}
+    .span-2{grid-column:span 2;text-align:left;padding-left:26px;}
+    .small{font-size:24px;}
+    @media(hover:none){button:active{filter:brightness(1.2);}}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.6);} 
+    .modal.open{display:flex;}
+    .sheet{background:#1c1c1c;padding:20px;border-radius:24px;width:min(92vw,420px);
+      box-shadow:0 10px 30px rgba(0,0,0,.4);} 
+    .sheet h2{margin:0 0 10px;font-weight:600;font-size:18px;color:#fff;}
+    .row{display:flex;gap:10px;} 
+    .row input{flex:1;padding:14px 16px;border-radius:14px;border:1px solid #2a2a2a;
+      background:#111;color:#fff;font-size:16px;outline:none;} 
+    .row button{flex:0 0 auto;padding:0 18px;height:48px;border-radius:14px;font-size:16px;
+      background:var(--op);color:#000;} 
+  </style>
+</head>
+<body>
+  <div class="phone" role="application" aria-label="Calculator">
+    <div class="display"><div class="value" id="value">0</div></div>
+    <div class="grid">
+      <button class="btn-func" data-action="clear" id="key-clear">AC</button>
+      <button class="btn-func small" data-action="negate">±</button>
+      <button class="btn-func small" data-action="percent">%</button>
+      <button class="btn-op" data-op="÷">÷</button>
+      <button class="btn-num" data-num="7">7</button><button class="btn-num" data-num="8">8</button><button class="btn-num" data-num="9">9</button><button class="btn-op" data-op="×">×</button>
+      <button class="btn-num" data-num="4">4</button><button class="btn-num" data-num="5">5</button><button class="btn-num" data-num="6">6</button><button class="btn-op" data-op="−">−</button>
+      <button class="btn-num" data-num="1">1</button><button class="btn-num" data-num="2">2</button><button class="btn-num" data-num="3">3</button><button class="btn-op" data-op="+">+</button>
+      <button class="btn-num span-2" data-num="0">0</button><button class="btn-num" data-dot=".">.</button><button class="btn-op" data-equals="=">=</button>
+    </div>
+    <div class="modal" id="percent-modal"><div class="sheet"><h2>Set fixed result</h2>
+      <div class="row"><input id="percent-input" type="text" inputmode="decimal" placeholder="Enter a number" />
+      <button id="percent-save">Save</button></div></div></div>
+  </div>
+  <script>
+    (function(){
+      const valueEl=document.getElementById('value');
+      const clearKey=document.getElementById('key-clear');
+      const modal=document.getElementById('percent-modal');
+      const percentInput=document.getElementById('percent-input');
+      const percentSave=document.getElementById('percent-save');
+      let display='0',stored=null,operator=null,overwrite=true;
+      let fixedResult=(localStorage.getItem('fixedResult')!==null)?parseFloat(localStorage.getItem('fixedResult')):null;
+      function format(n){if(typeof n!=='number'||!isFinite(n))return'Error';
+        let s=n.toString();if(Math.abs(n)<1e12&&Math.abs(n)>1e-9){s=Number(n.toPrecision(12)).toString();}
+        if(s.indexOf('e')!==-1)return s;if(s.includes('.')){s=s.replace(/\.0+$/,'');s=s.replace(/(\.\d*?)0+$/,'$1');}
+        return s.length>12?Number(n.toExponential(9)).toString():s;}
+      function setDisplay(s){display=s;valueEl.textContent=s;clearKey.textContent=(s!=='0'||stored!==null)?'C':'AC';}
+      function inputDigit(d){if(overwrite){setDisplay(d);overwrite=false;}else if(display.replace('.','').length<12){setDisplay(display==='0'?d:display+d);}}
+      function inputDot(){if(overwrite){setDisplay('0.');overwrite=false;return;}if(!display.includes('.'))setDisplay(display+'.');}
+      function clear(){if(clearKey.textContent==='C'){setDisplay('0');overwrite=true;}else{stored=null;operator=null;overwrite=true;setDisplay('0');document.querySelectorAll('.btn-op').forEach(b=>b.classList.remove('active'));}}
+      function negate(){if(display==='0'||display==='Error')return;setDisplay(display.startsWith('-')?display.slice(1):'-'+display);}
+      function openPercentModal(){modal.classList.add('open');modal.setAttribute('aria-hidden','false');percentInput.value=(fixedResult!==null&&isFinite(fixedResult))?String(fixedResult):'';setTimeout(()=>percentInput.focus(),0);}
+      function saveFixed(){const raw=percentInput.value.trim();const n=Number(raw);if(!isNaN(n)&&isFinite(n)){fixedResult=n;localStorage.setItem('fixedResult',String(n));stored=null;operator=null;overwrite=true;setDisplay('0');}closeModal();}
+      function closeModal(){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');}
+      function compute(){if(operator===null||stored===null)return parseFloat(display);const a=stored;const b=parseFloat(display);let result;switch(operator){case '+':result=a+b;break;case '−':result=a-b;break;case '×':result=a*b;break;case '÷':result=b===0?NaN:a/b;break;}return result;}
+      function chooseOp(op){document.querySelectorAll('.btn-op').forEach(b=>{if(b.dataset.op){b.classList.toggle('active',b.dataset.op===op);}});
+        if(!overwrite){if(operator){const result=compute();stored=isFinite(result)?result:NaN;setDisplay(format(stored));}else{stored=parseFloat(display);}overwrite=true;}operator=op;}
+      function equals(){if(fixedResult!==null&&isFinite(fixedResult)){setDisplay(format(fixedResult));stored=fixedResult;overwrite=true;operator=null;document.querySelectorAll('.btn-op').forEach(b=>b.classList.remove('active'));return;}
+        const result=compute();if(result===undefined)return;setDisplay(format(result));stored=result;overwrite=true;operator=null;document.querySelectorAll('.btn-op').forEach(b=>b.classList.remove('active'));}
+      document.addEventListener('click',e=>{const btn=e.target.closest('button');if(btn){if(btn.dataset.num){inputDigit(btn.dataset.num);return;}if(btn.dataset.dot){inputDot();return;}if(btn.dataset.action==='clear'){clear();return;}if(btn.dataset.action==='negate'){negate();return;}if(btn.dataset.action==='percent'){openPercentModal();return;}if(btn.dataset.op){chooseOp(btn.dataset.op);return;}if(btn.dataset.equals){equals();return;}}if(modal.classList.contains('open')&&e.target===modal){closeModal();}});
+      percentInput.addEventListener('keydown',ev=>{ev.stopPropagation();});
+      percentSave.addEventListener('click',saveFixed);
+      document.addEventListener('keydown',e=>{if(modal.classList.contains('open')){if(e.key==='Enter'){saveFixed();}if(e.key==='Escape'){closeModal();}return;}
+        const k=e.key;if(/^\d$/.test(k)){inputDigit(k);return;}if(k==='.'){inputDot();return;}if(k==='Escape'){clear();return;}if(k==='Enter'||k==='='){equals();return;}if(k==='%'){openPercentModal();return;}if(k==='Backspace'&&!overwrite){setDisplay(display.length>1?display.slice(0,-1):'0');}if(k==='+')chooseOp('+');if(k==='-')chooseOp('−');if(k==='*')chooseOp('×');if(k==='/')chooseOp('÷');});
+    })();
+  </script>
+</body>
+</html>
